@@ -1,0 +1,17 @@
+{
+  "name": "opentriage",
+  "version": "0.3.3",
+  "description": "AI investigation assistant for SOC analysts, as a Chrome extension. Vendor-neutral, learns each environment locally, human-approved actions.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "package": "node scripts/package.mjs",
+    "package:trusted": "node scripts/package.mjs --trusted"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

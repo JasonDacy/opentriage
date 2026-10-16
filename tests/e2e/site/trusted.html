@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Trusted input check — Example console</title></head>
+<body style="font:14px system-ui,sans-serif;margin:16px">
+  <h1>Console with strict input handling</h1>
+  <p>Button status: <span id="btnStatus">none</span></p>
+  <p><button id="onlyTrusted">Show details</button></p>
+  <p><label>Search <input id="q" type="search" aria-label="Search events"></label></p>
+  <p>Search status: <span id="qStatus">none</span></p>
+  <iframe src="trusted-frame.html" title="panel" style="width:420px;height:120px;border:1px solid #ccc"></iframe>
+  <script>
+    onlyTrusted.addEventListener('click', (e) => { btnStatus.textContent = e.isTrusted ? 'trusted click' : 'ignored untrusted click'; });
+    q.addEventListener('input', (e) => { qStatus.textContent = (e.isTrusted ? 'trusted input: ' : 'untrusted input: ') + q.value; });
+  </script>
+</body>
+</html>

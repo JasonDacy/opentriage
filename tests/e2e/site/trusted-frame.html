@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Frame</title></head>
+<body style="font:13px system-ui,sans-serif">
+  <p>Frame status: <span id="fStatus">none</span></p>
+  <button id="frameBtn" style="margin-left:40px">Expand evidence</button>
+  <script>
+    frameBtn.addEventListener('click', (e) => { fStatus.textContent = e.isTrusted ? 'frame trusted click' : 'frame ignored untrusted click'; });
+  </script>
+</body>
+</html>

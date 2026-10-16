@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenTriage</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <div class="top">
+      <div class="brand"><img src="../../icons/icon32.png" alt="">OpenTriage</div>
+      <span class="pill" id="memoryPill" title="Environment facts learned in this browser">0 facts</span>
+      <span class="spacer"></span>
+      <button class="ghost" id="popOut" title="Open OpenTriage in its own resizable window (starts a new conversation there)">⧉</button>
+      <button class="ghost" id="newChat" title="Start a new conversation">New</button>
+      <button class="ghost" id="openOptions" title="Settings, memory, playbooks, audit log">Settings</button>
+    </div>
+
+    <div class="session" id="sessionBar">
+      <div class="session-head">
+        <button class="ghost toggle" id="tabsToggle" aria-expanded="true" title="Show or hide the session tab list"><span class="caret">▾</span> <strong>Tabs</strong> <span class="pill" id="tabCount">0</span></button>
+        <span class="target-summary" id="targetSummary"></span>
+        <span class="spacer"></span>
+        <button id="addCurrent" title="Add the tab you're looking at to the OpenTriage tab group">+ Current</button>
+        <details id="addMenu" class="menu">
+          <summary title="Add another open tab">Add ▾</summary>
+          <div class="menu-list" id="addList"></div>
+        </details>
+      </div>
+      <div id="tabList" class="tab-list"></div>
+    </div>
+
+    <div class="actions" id="actions">
+      <button id="actInvestigate" title="Triage the alert on the current tab">Investigate</button>
+      <button id="actQueue" title="Work every alert in the queue on the current tab, holding anything that needs you">Queue</button>
+      <button id="actPlaybook" title="Turn an investigation into a playbook">Playbook</button>
+      <button id="actSummary" title="Summarise recent cases (last 7 days)">Summary</button>
+      <button id="actSetup" class="icon" title="Set up environment: a short interview so OpenTriage learns how your environment works" aria-label="Set up environment">⚙</button>
+      <button id="actSelection" class="hidden" title="Investigate the text you selected on the page">✂ Selection <small id="selectionPreview"></small></button>
+    </div>
+
+    <div class="log" id="log">
+      <div class="empty" id="empty">
+        <h2>Ready when you are</h2>
+        <p>Open an alert in your SIEM or XDR console and click <strong>Investigate</strong>. Add any other consoles you need with <strong>+ Current</strong> or <strong>Add ▾</strong>.</p>
+        <p class="muted">Nothing changes in your consoles unless you approve it.</p>
+      </div>
+    </div>
+
+    <div class="composer">
+      <textarea id="input" rows="2" placeholder="Ask, correct, or tell OpenTriage how your environment works…"></textarea>
+      <button class="primary" id="send">Send</button>
+      <button class="danger hidden" id="stop">Stop</button>
+    </div>
+    <div class="footer-note">Page content is sent to your model provider with your API key. Review your organisation's data-handling policy.</div>
+  </div>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "microsoft-sentinel",
+    "name": "Microsoft Sentinel",
+    "file": "microsoft-sentinel.md",
+    "hosts": ["^portal\\.azure\\.com$", "^portal\\.azure\\.us$"],
+    "titleHints": ["sentinel"]
+  },
+  {
+    "id": "microsoft-defender-xdr",
+    "name": "Microsoft Defender XDR",
+    "file": "microsoft-defender-xdr.md",
+    "hosts": ["^security\\.microsoft\\.com$", "^security\\.microsoft\\.us$"],
+    "titleHints": ["microsoft defender", "incidents", "advanced hunting"]
+  },
+  {
+    "id": "trend-vision-one",
+    "name": "Trend Vision One",
+    "file": "trend-vision-one.md",
+    "hosts": ["(^|\\.)xdr\\.trendmicro\\.com$"],
+    "titleHints": ["vision one", "workbench"]
+  },
+  {
+    "id": "splunk-es",
+    "name": "Splunk Enterprise Security",
+    "file": "splunk-es.md",
+    "hosts": ["\\.splunkcloud\\.com$"],
+    "titleHints": ["incident review", "enterprise security", "splunk"]
+  },
+  {
+    "id": "crowdstrike-falcon",
+    "name": "CrowdStrike Falcon",
+    "file": "crowdstrike-falcon.md",
+    "hosts": ["^falcon\\.([a-z0-9-]+\\.)?crowdstrike\\.com$", "^falcon\\.laggar\\.gcw\\.crowdstrike\\.com$"],
+    "titleHints": ["falcon", "crowdstrike"]
+  }
+]

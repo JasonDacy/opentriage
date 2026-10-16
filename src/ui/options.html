@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenTriage settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="opt">
+    <header>
+      <img src="../../icons/icon48.png" alt="">
+      <h1>OpenTriage</h1>
+      <span class="pill" id="version"></span>
+    </header>
+    <nav class="tabs" id="tabs">
+      <button data-tab="general" class="active">Model</button>
+      <button data-tab="safety">Safety</button>
+      <button data-tab="enrichment">Enrichment</button>
+      <button data-tab="environment">Environment memory</button>
+      <button data-tab="playbooks">Playbooks</button>
+      <button data-tab="cases">Case history</button>
+      <button data-tab="profiles">Platform profiles</button>
+      <button data-tab="audit">Audit log</button>
+    </nav>
+
+    <!-- Model -->
+    <section data-panel="general">
+      <div class="section">
+        <h2>Model provider</h2>
+        <p>OpenTriage calls the model directly from your browser with your own API key. Page content you investigate is sent to this provider — make sure that is allowed by your organisation.</p>
+        <div class="field"><label for="provider">Provider</label><div><select id="provider"></select></div></div>
+        <div class="field"><label for="model">Model</label><div><select id="model"></select><div class="hint">Sonnet is a good balance of speed, cost and judgement for triage.</div></div></div>
+        <div class="field">
+          <label for="apiKey">API key</label>
+          <div>
+            <input type="password" id="apiKey" autocomplete="off" spellcheck="false">
+            <div class="hint" id="keyHint"></div>
+            <label class="check" style="display:flex;gap:6px;margin-top:6px"><input type="checkbox" id="sessionOnlyKey"> Keep the key only until Chrome closes (session storage)</label>
+          </div>
+        </div>
+        <div class="field"><label for="maxSteps">Max steps per request</label><div><input type="number" id="maxSteps" min="5" max="150"><div class="hint">Upper bound on tool calls before OpenTriage pauses and asks you to continue.</div></div></div>
+        <div class="toolbar"><span class="spacer"></span><button id="testKey">Test connection</button><button class="primary" id="saveGeneral">Save</button></div>
+      </div>
+    </section>
+
+    <!-- Safety -->
+    <section data-panel="safety" class="hidden">
+      <div class="section">
+        <h2>Approvals</h2>
+        <p>Reading pages never needs approval. Changing anything does.</p>
+        <div class="field">
+          <label for="approvalMode">Approval mode</label>
+          <div>
+            <select id="approvalMode">
+              <option value="standard">Standard — approve clicks that look state-changing, submissions and new sites</option>
+              <option value="strict">Strict — approve every click and submission</option>
+            </select>
+            <div class="hint">Memory and playbook writes always need you, in every mode.</div>
+          </div>
+        </div>
+        <div class="field"><label for="maskEmails">Mask email addresses</label><div><label class="check" style="display:flex;gap:6px"><input type="checkbox" id="maskEmails"> Replace email addresses in page content with a***@domain before sending to the model</label></div></div>
+        <div class="toolbar"><span class="spacer"></span><button class="primary" id="saveSafety">Save</button></div>
+      </div>
+      <div class="section">
+        <h2>Input mode</h2>
+        <p>How OpenTriage clicks and types. Approvals work the same either way.</p>
+        <div class="field">
+          <label for="inputMode">Mode</label>
+          <div>
+            <select id="inputMode">
+              <option value="simulated">Simulated — page events (default, no extra permission)</option>
+              <option value="trusted">Trusted — real mouse and keyboard through Chrome's debugger</option>
+            </select>
+            <div class="hint" id="inputModeHint"></div>
+          </div>
+        </div>
+        <div class="toolbar"><span class="spacer"></span><button class="primary" id="saveInput">Save</button></div>
+      </div>
+      <div class="section">
+        <h2>Your own tools</h2>
+        <p>Sites where OpenTriage may type or open indicators without asking — your SIEM, XDR, ticketing and wiki. Everything else (and always well-known external services such as VirusTotal) asks first, because the indicator leaves your organisation. Sites are added when you tick "one of our own tools" on an approval.</p>
+        <div class="list" id="internalList"></div>
+      </div>
+      <div class="section">
+        <h2>Screenshots</h2>
+        <p>Lets OpenTriage see pages the way you do (process trees, graphs, icon-only buttons) and click by position. Chrome only allows an extension to capture a tab when it holds the "all sites" permission, so this is a separate, optional grant. OpenTriage still only reads and acts on tabs in your OpenTriage tab group.</p>
+        <div class="toolbar"><span id="shotStatus" class="muted"></span><span class="spacer"></span><button id="shotToggle"></button></div>
+      </div>
+      <div class="section">
+        <h2>Site access</h2>
+        <p>Sites OpenTriage may read (granted from the side panel). Trusted sites can also be navigated to without asking.</p>
+        <div class="list" id="origins"></div>
+      </div>
+    </section>
+
+    <!-- Enrichment -->
+    <section data-panel="enrichment" class="hidden">
+      <div class="section">
+        <h2>Indicator enrichment sources</h2>
+        <p>Off by default. Looking up an indicator sends it to that third party, and each lookup still asks for your approval. Use <code>{ioc}</code> in the URL template.</p>
+        <div class="list" id="sources"></div>
+        <h2 style="margin-top:16px">Add a source</h2>
+        <div class="field"><label for="srcName">Name</label><input type="text" id="srcName" placeholder="Internal threat intel portal"></div>
+        <div class="field"><label for="srcUrl">URL template</label><input type="url" id="srcUrl" placeholder="https://intel.example.com/search?q={ioc}"></div>
+        <div class="field"><label>Indicator types</label><div id="srcTypes" class="toolbar"></div></div>
+        <div class="toolbar"><span class="spacer"></span><button class="primary" id="addSource">Add source</button></div>
+      </div>
+    </section>
+
+    <!-- Environment memory -->
+    <section data-panel="environment" class="hidden">
+      <div class="section">
+        <h2>Environment memory</h2>
+        <p>What OpenTriage has learned about your environment, approved by you. Stored only in this browser. Export it to share with your team — never commit it to a public repository.</p>
+        <div class="toolbar">
+          <button id="memExport">Export…</button>
+          <button id="memImport">Import team file…</button>
+          <input type="file" id="memFile" accept="application/json" class="hidden">
+          <span class="spacer"></span>
+          <button class="danger" id="memClear">Clear all</button>
+        </div>
+        <div class="list" id="memList"></div>
+      </div>
+      <div class="section">
+        <h2>Add a fact</h2>
+        <div class="field"><label for="memCat">Category</label><select id="memCat"></select></div>
+        <div class="field"><label for="memFact">Fact</label><textarea id="memFact" rows="3" placeholder="e.g. Device owners are listed in the asset inventory under 'Primary user'; search by hostname."></textarea></div>
+        <div class="toolbar"><span class="spacer"></span><button class="primary" id="memAdd">Add</button></div>
+      </div>
+    </section>
+
+    <!-- Playbooks -->
+    <section data-panel="playbooks" class="hidden">
+      <div class="section">
+        <h2>Playbook library</h2>
+        <p>Playbooks OpenTriage checks before every investigation, keyed on detection name.</p>
+        <div class="toolbar">
+          <button id="pbExport">Export all…</button>
+          <button id="pbImport">Import…</button>
+          <input type="file" id="pbFile" accept="application/json" class="hidden">
+          <button id="pbNew">New playbook (JSON)…</button>
+          <span class="spacer"></span>
+          <span class="muted" id="pbCount"></span>
+        </div>
+        <div class="list" id="pbList"></div>
+      </div>
+      <div class="section hidden" id="pbEditorSection">
+        <h2>Playbook editor</h2>
+        <p>Edit the structured playbook. It is validated against the built-in template before saving.</p>
+        <textarea id="pbEditor" rows="24" spellcheck="false" style="font-family:var(--mono);font-size:12px"></textarea>
+        <ul class="issues" id="pbIssues"></ul>
+        <div class="toolbar"><button id="pbCancel">Cancel</button><span class="spacer"></span><button id="pbValidate">Validate</button><button class="primary" id="pbSave">Save</button></div>
+      </div>
+      <div class="section">
+        <h2>Coverage by MITRE tactic</h2>
+        <div id="coverage" class="list"></div>
+      </div>
+      <div class="section">
+        <h2>Organisation template (optional)</h2>
+        <p>If your team already has a playbook template, paste it here as Markdown. OpenTriage will write playbooks in that structure and check every heading is present. Leave empty to use the built-in eight-section template.</p>
+        <textarea id="customTemplate" rows="10" spellcheck="false" style="font-family:var(--mono);font-size:12px" placeholder="# Detection name&#10;## Overview&#10;## Triage steps&#10;## Escalation&#10;## Review history"></textarea>
+        <div class="toolbar"><button id="downloadBuiltin">Download built-in template</button><span class="spacer"></span><button id="clearTemplate">Use built-in template</button><button class="primary" id="saveTemplate">Save template</button></div>
+      </div>
+    </section>
+
+    <!-- Cases -->
+    <section data-panel="cases" class="hidden">
+      <div class="section">
+        <h2>Case history</h2>
+        <p>One row per alert OpenTriage worked on (from investigations and queue runs). Stored only in this browser; used for summaries.</p>
+        <div class="toolbar"><button id="casesExport">Export CSV…</button><span class="spacer"></span><span class="muted" id="casesCount"></span><button class="danger" id="casesClear">Clear</button></div>
+        <div class="table-wrap"><table id="casesTable"><thead><tr><th>Updated</th><th>Console</th><th>Alert</th><th>Detection</th><th>Verdict</th><th>Outcome</th><th>Reason</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- Profiles -->
+    <section data-panel="profiles" class="hidden">
+      <div class="section">
+        <h2>Platform profiles</h2>
+        <p>Vendor-public hints about where things are in common consoles. They help OpenTriage get oriented faster; consoles without a profile are handled by reading the page. Profiles never contain organisation-specific details — that belongs in environment memory.</p>
+        <div class="list" id="profiles"></div>
+      </div>
+    </section>
+
+    <!-- Audit -->
+    <section data-panel="audit" class="hidden">
+      <div class="section">
+        <h2>Audit log</h2>
+        <p>Every tool action, approval decision, and memory or playbook change (last 2,000 entries).</p>
+        <div class="toolbar"><button id="auditExport">Export…</button><span class="spacer"></span><button class="danger" id="auditClear">Clear</button></div>
+        <div class="audit" id="auditLog"></div>
+      </div>
+    </section>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

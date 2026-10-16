@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "OpenTriage",
+  "short_name": "OpenTriage",
+  "version": "0.3.3",
+  "description": "An AI investigation assistant for SOC analysts. Works in any SIEM or XDR console, learns your environment locally, and never changes anything without your approval.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Open OpenTriage",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/ui/sidepanel.html"
+  },
+  "options_page": "src/ui/options.html",
+  "permissions": [
+    "sidePanel",
+    "scripting",
+    "tabs",
+    "storage",
+    "contextMenus",
+    "webNavigation",
+    "tabGroups"
+  ],
+  "host_permissions": [
+    "https://api.anthropic.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "<all_urls>"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  }
+}

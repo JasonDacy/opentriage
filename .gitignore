@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+# Your organisation's terms for `npm run check`. Never commit this file.
+.opentriage-denylist
+# Exports from the extension — they describe your environment.
+opentriage-environment-*.json
+opentriage-playbooks-*.json
+opentriage-audit-*.json
+opentriage-cases-*.csv
+__pycache__/
+# Team environment files bundled into team builds
+src/team/
+*.environment.json
