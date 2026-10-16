@@ -3,6 +3,10 @@
 
 import { uid } from '../lib/storage.js';
 import { TOOL_DEFS, createToolRunner } from './tools.js';
+
+// Models that can't see images get no screenshot-based tools.
+const VISION_TOOLS = new Set(['screenshot', 'click_at']);
+const TEXT_ONLY_TOOL_DEFS = TOOL_DEFS.filter((t) => !VISION_TOOLS.has(t.name));
 import { buildSystemPrompt, buildTurnContext } from './prompt.js';
 
 const KEEP_FULL_RESULTS = 8;
@@ -36,7 +40,8 @@ export function compactHistory(messages) {
   }
 }
 
-const THINKING = new Set(['thinking', 'redacted_thinking']);
+// 'reasoning' holds other providers' replayable reasoning (e.g. OpenAI encrypted reasoning items).
+const THINKING = new Set(['thinking', 'redacted_thinking', 'reasoning']);
 
 /**
  * Remove reasoning blocks from earlier, completed assistant turns. They are
@@ -138,7 +143,7 @@ export function createSession(deps) {
   }
 
   async function complete(sys) {
-    const req = { system: sys, messages, tools: TOOL_DEFS, maxTokens: deps.settings.maxTokens || 4096, signal: controller.signal };
+    const req = { system: sys, messages, tools: deps.provider.vision === false ? TEXT_ONLY_TOOL_DEFS : TOOL_DEFS, maxTokens: deps.settings.maxTokens || 4096, signal: controller.signal };
     try {
       return await deps.provider.complete(req);
     } catch (e) {

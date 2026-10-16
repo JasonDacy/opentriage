@@ -22,7 +22,7 @@
 | `src/memory/memory.js` | Environment memory store, categories, import/export, prompt rendering. |
 | `src/playbooks/*` | Template, validator, Markdown/HTML renderers, local library. |
 | `src/knowledge/*` | Methodology and platform profiles (Markdown) plus the loader and profile matcher. |
-| `src/providers/*` | Model provider registry; Anthropic implementation; template for others. |
+| `src/providers/*` | Model provider registry and adapters: Anthropic, OpenAI (Responses API), Gemini, OpenAI-compatible (local servers and gateways); shared helpers; template for others. |
 
 ## Why the agent runs in the side panel, not the service worker
 

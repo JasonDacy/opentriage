@@ -8,7 +8,7 @@ import { validatePlaybook } from '../playbooks/validator.js';
 import { blankPlaybook, SECTIONS } from '../playbooks/template.js';
 import { toHtml } from '../playbooks/render.js';
 import { createKnowledge, extensionReader } from '../knowledge/loader.js';
-import { PROVIDERS, getProvider } from '../providers/index.js';
+import { PROVIDERS, LOCAL_PRESETS, getProvider, apiKeyName, visionFor, isModelOrigin } from '../providers/index.js';
 
 const $ = (id) => document.getElementById(id);
 const storage = chromeStorage('local');
@@ -60,56 +60,140 @@ $('tabs').addEventListener('click', (e) => {
 });
 
 // ---------- general ----------
+const CUSTOM = '__custom';
+const pid = () => $('provider').value;
+const keyName = (id = pid()) => apiKeyName(KEYS.apiKey, id);
+
 function keyArea() {
   return $('sessionOnlyKey').checked ? chromeStorage('session') : storage;
 }
 
-function renderModels() {
-  const p = PROVIDERS[$('provider').value];
-  $('model').replaceChildren(...p.models.map((m) => el('option', { value: m.id, selected: m.id === settings.model }, m.name)));
-  $('keyHint').replaceChildren('Format ', el('code', {}, p.keyHint), '. Create one at ', el('a', { href: p.keyUrl, target: '_blank', rel: 'noopener' }, p.keyUrl));
+/** Settings as they would be saved from the form (for origins, test connection and save). */
+function formSettings() {
+  const p = PROVIDERS[pid()];
+  const sel = $('model').value;
+  const model = sel === CUSTOM ? $('customModel').value.trim() : sel;
+  return {
+    provider: p.id,
+    model,
+    baseUrl: $('baseUrl').value.trim(),
+    authStyle: $('authStyle').value,
+    visionOverride: { ...(settings.visionOverride || {}), [p.id]: $('vision').checked },
+  };
+}
+
+function renderModels(models) {
+  const p = PROVIDERS[pid()];
+  const list = models || p.models;
+  const current = settings.provider === p.id ? settings.model : '';
+  const known = list.some((m) => (m.id || m) === current);
+  $('model').replaceChildren(
+    ...list.map((m) => el('option', { value: m.id || m, selected: (m.id || m) === current }, m.name || m)),
+    el('option', { value: CUSTOM, selected: !!current && !known }, list.length ? 'Other model ID…' : 'Type a model ID…'),
+  );
+  if (!current && list.length) $('model').value = list[0].id || list[0];
+  $('customModel').value = current && !known ? current : '';
+  syncModelInput();
+}
+
+function syncModelInput() {
+  $('customModel').classList.toggle('hidden', $('model').value !== CUSTOM);
+}
+
+async function renderProvider() {
+  const p = PROVIDERS[pid()];
+  const note = $('providerNote');
+  note.className = `notice ${p.warning ? 'warn' : ''}`;
+  note.textContent = p.warning || p.note || '';
+  $('rowBaseUrl').classList.toggle('hidden', !p.needsBaseUrl);
+  $('rowAuthStyle').classList.toggle('hidden', !p.needsBaseUrl);
+  $('rowLoadModels').classList.toggle('hidden', !p.needsBaseUrl);
+  $('baseUrl').value = settings.baseUrl || '';
+  $('authStyle').value = settings.authStyle || 'bearer';
+  $('presets').replaceChildren(...LOCAL_PRESETS.map((x) => el('button', { onclick: () => ($('baseUrl').value = x.baseUrl) }, x.name)));
+  renderModels();
+  $('modelHint').textContent = p.needsBaseUrl
+    ? 'Use a model that supports tool (function) calling. Larger models investigate noticeably better.'
+    : 'The first model listed is a good balance of speed, cost and judgement for triage. Choose "Other model ID…" for a model not listed.';
+  $('vision').checked = visionFor(p.id, settings);
+  $('keyHint').replaceChildren(
+    p.keyOptional ? 'Optional — local servers usually need none.' : el('span', {}, 'Format ', el('code', {}, p.keyHint), '. '),
+    p.keyUrl ? el('span', {}, ' Create one at ', el('a', { href: p.keyUrl, target: '_blank', rel: 'noopener' }, p.keyUrl)) : '',
+  );
+  $('apiKey').value = (await keyArea().get(keyName(), '')) || '';
 }
 
 async function loadGeneral() {
   $('provider').replaceChildren(...Object.values(PROVIDERS).map((p) => el('option', { value: p.id, selected: p.id === settings.provider }, p.name)));
-  renderModels();
   $('sessionOnlyKey').checked = !!settings.sessionOnlyKey;
-  $('apiKey').value = (await keyArea().get(KEYS.apiKey, '')) || '';
   $('maxSteps').value = settings.maxSteps;
+  await renderProvider();
 }
 
-$('provider').addEventListener('change', renderModels);
+/** Ask Chrome for access to the provider's API. Must run inside the click. */
+function requestModelAccess(s) {
+  const origins = PROVIDERS[s.provider].origins(s).filter((o) => o !== 'https://api.anthropic.com/*');
+  return origins.length ? chrome.permissions.request({ origins }) : Promise.resolve(true);
+}
+
+$('provider').addEventListener('change', renderProvider);
+$('model').addEventListener('change', syncModelInput);
+$('sessionOnlyKey').addEventListener('change', async () => ($('apiKey').value = (await keyArea().get(keyName(), '')) || $('apiKey').value));
+
 $('saveGeneral').addEventListener('click', async () => {
+  const next = formSettings();
+  const access = requestModelAccess(next); // first, while the click still counts as a user gesture
+  if (!next.model) return toast('Choose or type a model ID.');
+  if (PROVIDERS[next.provider].needsBaseUrl && !/^https?:\/\//.test(next.baseUrl)) return toast('Enter the server URL, e.g. http://localhost:11434/v1');
+  if (!(await access.catch(() => false))) return toast(`OpenTriage needs permission to reach the model server. Nothing was saved.`);
   const sessionOnly = $('sessionOnlyKey').checked;
   const key = $('apiKey').value.trim();
-  // Keep the key in exactly one place.
-  await storage.remove(KEYS.apiKey);
-  await chromeStorage('session').remove(KEYS.apiKey);
-  if (key) await (sessionOnly ? chromeStorage('session') : storage).set(KEYS.apiKey, key);
+  // Keep each key in exactly one place.
+  await storage.remove(keyName(next.provider));
+  await chromeStorage('session').remove(keyName(next.provider));
+  if (key) await (sessionOnly ? chromeStorage('session') : storage).set(keyName(next.provider), key);
   settings = await saveSettings(storage, {
-    provider: $('provider').value,
-    model: $('model').value,
+    ...next,
     sessionOnlyKey: sessionOnly,
     maxSteps: Math.max(5, Math.min(150, Number($('maxSteps').value) || DEFAULT_SETTINGS.maxSteps)),
   });
-  // Nudge open side panels to rebuild their session with the new key.
+  await audit.log({ type: 'settings.provider', provider: next.provider, model: next.model });
+  // Nudge open side panels to rebuild their session with the new provider.
   await storage.set(KEYS.apiKey + '.changed', Date.now());
   toast('Saved');
 });
 
 $('testKey').addEventListener('click', async () => {
+  const s = formSettings();
+  const access = requestModelAccess(s);
   const btn = $('testKey');
   btn.disabled = true;
   btn.textContent = 'Testing…';
   try {
-    const p = getProvider($('provider').value, { apiKey: $('apiKey').value.trim(), model: $('model').value });
-    const r = await p.complete({ system: 'Reply with the single word OK.', messages: [{ role: 'user', content: 'ping' }], tools: [], maxTokens: 10 });
-    toast(r.content.some((b) => b.type === 'text') ? 'Connection works' : 'Unexpected response');
+    if (!(await access.catch(() => false))) throw new Error('OpenTriage needs permission to reach the model server.');
+    const p = getProvider(s.provider, { apiKey: $('apiKey').value.trim(), model: s.model, baseUrl: s.baseUrl, authStyle: s.authStyle, vision: s.visionOverride[s.provider] });
+    const r = await p.complete({ system: 'Reply with the single word OK.', messages: [{ role: 'user', content: 'ping' }], tools: [], maxTokens: 64 });
+    toast(r.content.some((b) => b.type === 'text' && b.text) ? 'Connection works' : 'Unexpected response');
   } catch (e) {
     toast(e.message);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Test connection';
+  }
+});
+
+$('loadModels').addEventListener('click', async () => {
+  const s = formSettings();
+  const access = requestModelAccess(s);
+  try {
+    if (!(await access.catch(() => false))) throw new Error('OpenTriage needs permission to reach the model server.');
+    const p = getProvider('compatible', { apiKey: $('apiKey').value.trim(), model: s.model || 'list', baseUrl: s.baseUrl, authStyle: s.authStyle });
+    const ids = await p.listModels();
+    if (!ids.length) return toast('The server reported no models.');
+    renderModels(ids);
+    toast(`${ids.length} model${ids.length === 1 ? '' : 's'} found`);
+  } catch (e) {
+    toast(e.message);
   }
 });
 
@@ -184,7 +268,7 @@ $('shotToggle').addEventListener('click', async () => {
 async function renderOrigins() {
   renderScreenshots();
   const perms = await chrome.permissions.getAll();
-  const granted = (perms.origins || []).filter((o) => o !== 'https://api.anthropic.com/*' && o !== '<all_urls>').map((o) => o.replace(/\/\*$/, ''));
+  const granted = (perms.origins || []).filter((o) => o !== '<all_urls>' && !isModelOrigin(o, settings)).map((o) => o.replace(/\/\*$/, ''));
   const all = [...new Set([...granted, ...(settings.trustedOrigins || [])])].sort();
   const list = $('origins');
   if (!all.length) return list.replaceChildren(el('div', { class: 'muted' }, 'No sites yet. Use "Grant access to this site" in the side panel.'));

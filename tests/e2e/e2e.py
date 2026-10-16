@@ -267,6 +267,76 @@ def handle_api(route):
     route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps(body))
 
 
+# ---- phase C: other model providers, each through its own API format
+OTHER = {"openai": [], "gemini": [], "compatible": []}
+
+
+def mock_openai(route):
+    req = json.loads(route.request.post_data or "{}")
+    OTHER["openai"].append(req)
+    n = len(OTHER["openai"])
+    if n == 1:
+        out = [{"type": "reasoning", "id": "rs_1", "encrypted_content": "ENC", "summary": []},
+               {"type": "function_call", "call_id": "call_a", "name": "screenshot", "arguments": "{}"}]
+        body = {"status": "completed", "output": out, "usage": {"input_tokens": 1, "output_tokens": 1}}
+    else:
+        body = {"status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": "## OpenAI report\nVerdict: Undetermined"}]}]}
+    route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+
+def mock_gemini(route):
+    req = json.loads(route.request.post_data or "{}")
+    OTHER["gemini"].append({"url": route.request.url, "key": route.request.headers.get("x-goog-api-key"), "body": req})
+    if len(OTHER["gemini"]) == 1:
+        parts = [{"functionCall": {"name": "screenshot", "args": {}}, "thoughtSignature": "SIG-1"}]
+    else:
+        parts = [{"text": "## Gemini report\nVerdict: Undetermined"}]
+    route.fulfill(status=200, content_type="application/json", body=json.dumps({"candidates": [{"finishReason": "STOP", "content": {"role": "model", "parts": parts}}]}))
+
+
+def mock_local(route):
+    if route.request.url.endswith("/models"):
+        return route.fulfill(status=200, content_type="application/json", body=json.dumps({"data": [{"id": "qwen3:32b"}, {"id": "llama3.3"}]}))
+    req = json.loads(route.request.post_data or "{}")
+    OTHER["compatible"].append(req)
+    if len(OTHER["compatible"]) == 1:
+        msg = {"content": None, "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "get_page_snapshot", "arguments": "{}"}}]}
+        fr = "tool_calls"
+    else:
+        msg, fr = {"content": "<think>reasoning</think>## Local report\nVerdict: Undetermined"}, "stop"
+    route.fulfill(status=200, content_type="application/json", body=json.dumps({"choices": [{"finish_reason": fr, "message": msg}]}))
+
+
+def use_provider(opts, panel, provider, model=None, key=None, base=None, load_models=False):
+    opts.goto(opts.url.split("#")[0] + "#general")
+    opts.reload()
+    opts.select_option("#provider", provider)
+    if base:
+        opts.fill("#baseUrl", base)
+    if load_models:
+        opts.click("#loadModels")
+        opts.wait_for_selector("#model option[value='qwen3:32b']", state="attached")
+        opts.wait_for_selector(".toast", state="detached")
+    if model:
+        opts.select_option("#model", model)
+    if key is not None:
+        opts.fill("#apiKey", key)
+    opts.click("#saveGeneral")
+    opts.wait_for_selector(".toast")
+    msg = opts.inner_text(".toast")
+    check(f"{provider} settings saved", msg == "Saved") if msg != "Saved" else None
+    if msg != "Saved":
+        print("toast:", msg)
+
+
+def ask(panel, text, done_text):
+    panel.click("#newChat")
+    panel.fill("#input", text)
+    panel.click("#send")
+    panel.wait_for_selector(f".msg.assistant:has-text('{done_text}')", timeout=30000)
+    panel.wait_for_selector("#send:not(.hidden)")
+
+
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="ot-"))
     ext = build_test_extension(tmp)
@@ -415,6 +485,47 @@ def main():
         panel.screenshot(path=str(OUT / "9-queue.png"), full_page=True)
 
         check("every scripted model step ran", len(requests) == len(script))
+
+        # ---- phase C: switch providers in Settings and run a turn through each API format
+        ctx.route("https://api.openai.com/**", mock_openai)
+        ctx.route("https://generativelanguage.googleapis.com/**", mock_gemini)
+        ctx.route("http://localhost:11500/**", mock_local)
+        opts.goto(f"chrome-extension://{ext_id}/src/ui/options.html#general")
+        opts.wait_for_selector("#provider option[value=openai]", state="attached")
+        check("settings list four providers", opts.locator("#provider option").count() == 4)
+
+        use_provider(opts, panel, "openai", model="gpt-6-sol", key="sk-e2e-openai")
+        check("Anthropic key kept separately", panel.evaluate("chrome.storage.local.get(['ot.apiKey','ot.apiKey.openai']).then(r => [r['ot.apiKey'], r['ot.apiKey.openai']])") == ["sk-ant-e2e-test", "sk-e2e-openai"])
+        ask(panel, "Investigate with OpenAI", "OpenAI report")
+        o = OTHER["openai"]
+        check("OpenAI: Responses API called twice", len(o) == 2)
+        check("OpenAI: tools sent as functions", any(t["name"] == "screenshot" for t in o[0]["tools"]))
+        items = o[1]["input"] if len(o) > 1 else []
+        check("OpenAI: reasoning replayed before the call", [i.get("type") for i in items if i.get("type") in ("reasoning", "function_call")] == ["reasoning", "function_call"])
+        check("OpenAI: tool output returned", any(i.get("type") == "function_call_output" and i["call_id"] == "call_a" for i in items))
+        check("OpenAI: screenshot sent as an image", "data:image/" in json.dumps(items))
+
+        use_provider(opts, panel, "gemini", model="gemini-3.8-flash", key="AIza-e2e")
+        warn = opts.inner_text("#providerNote")
+        check("Gemini free-tier warning shown", "free" in warn.lower() and "billing" in warn.lower())
+        ask(panel, "Investigate with Gemini", "Gemini report")
+        g = OTHER["gemini"]
+        check("Gemini: key in header, not URL", len(g) == 2 and g[0]["key"] == "AIza-e2e" and "AIza" not in g[0]["url"])
+        model_parts = [p for c in g[1]["body"]["contents"] if c["role"] == "model" for p in c["parts"]] if len(g) > 1 else []
+        check("Gemini: thought signature returned", any(p.get("thoughtSignature") == "SIG-1" for p in model_parts))
+        user_parts = g[1]["body"]["contents"][-1]["parts"] if len(g) > 1 else []
+        check("Gemini: function response and screenshot sent", any("functionResponse" in p for p in user_parts) and any("inlineData" in p for p in user_parts))
+
+        use_provider(opts, panel, "compatible", base="http://localhost:11500/v1", key="", load_models=True, model="qwen3:32b")
+        check("local: vision off by default", not opts.is_checked("#vision"))
+        opts.screenshot(path=str(OUT / "10-options-local-model.png"), full_page=True)
+        ask(panel, "Investigate with a local model", "Local report")
+        lc = OTHER["compatible"]
+        check("local: chat completions with tools", len(lc) == 2 and lc[0]["model"] == "qwen3:32b" and lc[0]["tools"])
+        check("local: no screenshot tools for a text-only model", not any(t["function"]["name"] in ("screenshot", "click_at") for t in lc[0]["tools"]))
+        check("local: tool result returned", any(m.get("role") == "tool" and m.get("tool_call_id") == "c1" for m in lc[1]["messages"]))
+        check("local: think tags hidden", "reasoning" not in panel.locator(".msg.assistant").last.inner_text())
+        panel.screenshot(path=str(OUT / "11-local-report.png"), full_page=True)
 
         # ---- remove a tab from the session
         panel.click("#tabsToggle") if panel.locator("#sessionBar.collapsed").count() else None

@@ -726,3 +726,12 @@ test('methodology makes the owner/role step mandatory and reports its source', a
   assert.match(k.methodology, /Owner and role \(mandatory — never skip\)/);
   assert.match(k.methodology, /### Owner & role\n\| Device \| Owner \| Role \/ team \| Source \|/);
 });
+
+test('text-only models are not offered screenshot tools', async () => {
+  const ctx = await setup([{ content: [{ type: 'text', text: 'ok' }], stopReason: 'end_turn', usage: {} }]);
+  ctx.provider.vision = false;
+  await ctx.session.send('Investigate', { mode: 'investigate' });
+  const names = ctx.provider.requests[0].tools.map((t) => t.name);
+  assert.ok(!names.includes('screenshot') && !names.includes('click_at'));
+  assert.ok(names.includes('get_page_snapshot'));
+});

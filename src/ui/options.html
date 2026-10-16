@@ -29,8 +29,24 @@
       <div class="section">
         <h2>Model provider</h2>
         <p>OpenTriage calls the model directly from your browser with your own API key. Page content you investigate is sent to this provider — make sure that is allowed by your organisation.</p>
-        <div class="field"><label for="provider">Provider</label><div><select id="provider"></select></div></div>
-        <div class="field"><label for="model">Model</label><div><select id="model"></select><div class="hint">Sonnet is a good balance of speed, cost and judgement for triage.</div></div></div>
+        <div class="field"><label for="provider">Provider</label><div><select id="provider"></select><div class="notice" id="providerNote" style="margin-top:6px"></div></div></div>
+        <div class="field" id="rowBaseUrl">
+          <label for="baseUrl">Server URL</label>
+          <div>
+            <input type="url" id="baseUrl" spellcheck="false" placeholder="http://localhost:11434/v1">
+            <div class="toolbar" id="presets" style="margin-top:6px"></div>
+            <div class="hint">The base URL of an OpenAI-compatible API (the part before <code>/chat/completions</code>). Ollama: start it with <code>OLLAMA_ORIGINS=chrome-extension://*</code> so it accepts requests from the extension, and raise its context length (e.g. <code>OLLAMA_CONTEXT_LENGTH=32768</code>) — the default is too small for investigations.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="model">Model</label>
+          <div>
+            <select id="model"></select>
+            <input type="text" id="customModel" spellcheck="false" placeholder="Model ID, e.g. qwen3:32b" style="margin-top:6px">
+            <div class="toolbar" id="rowLoadModels" style="margin-top:6px"><button id="loadModels">Load models from server</button></div>
+            <div class="hint" id="modelHint"></div>
+          </div>
+        </div>
         <div class="field">
           <label for="apiKey">API key</label>
           <div>
@@ -39,6 +55,8 @@
             <label class="check" style="display:flex;gap:6px;margin-top:6px"><input type="checkbox" id="sessionOnlyKey"> Keep the key only until Chrome closes (session storage)</label>
           </div>
         </div>
+        <div class="field" id="rowAuthStyle"><label for="authStyle">Key header</label><div><select id="authStyle"><option value="bearer">Authorization: Bearer (most servers)</option><option value="api-key">api-key (Azure OpenAI)</option></select></div></div>
+        <div class="field"><label for="vision">Images</label><div><label class="check" style="display:flex;gap:6px"><input type="checkbox" id="vision"> This model accepts images (screenshots)</label><div class="hint">Turn off for text-only models. OpenTriage then reads pages as text and doesn't offer screenshots or click-by-position.</div></div></div>
         <div class="field"><label for="maxSteps">Max steps per request</label><div><input type="number" id="maxSteps" min="5" max="150"><div class="hint">Upper bound on tool calls before OpenTriage pauses and asks you to continue.</div></div></div>
         <div class="toolbar"><span class="spacer"></span><button id="testKey">Test connection</button><button class="primary" id="saveGeneral">Save</button></div>
       </div>

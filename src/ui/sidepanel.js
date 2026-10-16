@@ -10,7 +10,7 @@ import { playbookTitle } from '../playbooks/template.js';
 import { createKnowledge, extensionReader } from '../knowledge/loader.js';
 import { chromeBrowser } from '../agent/browser.js';
 import { createSession } from '../agent/agent.js';
-import { getProvider } from '../providers/index.js';
+import { PROVIDERS, getProvider, apiKeyName, visionFor } from '../providers/index.js';
 import { renderMarkdown } from './markdown.js';
 
 const $ = (id) => document.getElementById(id);
@@ -509,18 +509,44 @@ function setBusy(b) {
 
 async function apiKey() {
   const area = settings.sessionOnlyKey ? chromeStorage('session') : storage;
-  return area.get(KEYS.apiKey, '');
+  return area.get(apiKeyName(KEYS.apiKey, settings.provider), '');
+}
+
+/** True when the provider can be used: a key (unless optional) and Chrome access to its API. */
+async function providerReady() {
+  const p = PROVIDERS[settings.provider];
+  if (!p) return { ok: false, why: 'The model provider in Settings is not recognised. ' };
+  if (!p.keyOptional && !(await apiKey())) return { ok: false, why: 'Add your model API key in Settings to start. ' };
+  if (p.needsBaseUrl && !settings.baseUrl) return { ok: false, why: 'Set the model server URL in Settings to start. ' };
+  const origins = p.origins(settings).filter((o) => o !== 'https://api.anthropic.com/*');
+  if (origins.length && !(await chrome.permissions.contains({ origins }).catch(() => false))) {
+    return { ok: false, why: `OpenTriage needs permission to reach ${origins.join(', ').replace(/\/\*$/, '')}. Open Settings → Model and click Save. ` };
+  }
+  return { ok: true };
 }
 
 async function ensureSession() {
   if (session) return session;
-  const key = await apiKey();
-  if (!key) {
-    const n = notice('Add your model API key in Settings to start. ');
+  const ready = await providerReady();
+  if (!ready.ok) {
+    const n = notice(ready.why);
     n.append(el('button', { onclick: () => chrome.runtime.openOptionsPage() }, 'Open settings'));
     return null;
   }
-  const provider = getProvider(settings.provider, { apiKey: key, model: settings.model });
+  let provider;
+  try {
+    provider = getProvider(settings.provider, {
+      apiKey: await apiKey(),
+      model: settings.model,
+      baseUrl: settings.baseUrl,
+      authStyle: settings.authStyle,
+      vision: visionFor(settings.provider, settings),
+    });
+  } catch (e) {
+    const n = notice(e.message + ' ', 'error');
+    n.append(el('button', { onclick: () => chrome.runtime.openOptionsPage() }, 'Open settings'));
+    return null;
+  }
   session = createSession({
     provider,
     browser,
@@ -624,8 +650,9 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   await renderSession();
   await refreshMemoryPill();
   await checkSelection();
-  if (!(await apiKey())) {
-    const n = notice('Welcome. Add your model API key in Settings to get started. ');
+  const ready = await providerReady();
+  if (!ready.ok) {
+    const n = notice('Welcome. ' + ready.why);
     n.append(el('button', { onclick: () => chrome.runtime.openOptionsPage() }, 'Open settings'));
   } else if (!(await memory.all()).length) {
     notice('Tip: run "Set up environment" once so OpenTriage learns how your organisation works. You can also import a team environment file in Settings.');

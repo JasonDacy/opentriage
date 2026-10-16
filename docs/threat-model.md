@@ -57,15 +57,15 @@ OpenTriage reads security consoles and can act in them. That makes it an attract
 ### T5 — Overbroad browser access
 **Mitigations.**
 - **Session tab group.** The agent can only list, read, screenshot or act on tabs in the analyst's "OpenTriage" tab group. Every tool checks group membership; a tab id outside the group is refused. Personal tabs, mail and unrelated work stay invisible to the agent even when the extension holds site access.
-- No site access at install. Access is requested per origin (including embedded-frame origins) at the analyst's click, can be revoked in Settings, and the only built-in host permission is the model API. Page scripts are injected on demand, not as persistent content scripts.
+- No site access at install. Access is requested per origin (including embedded-frame origins) at the analyst's click, can be revoked in Settings, and the only built-in host permission is the Anthropic API; other model APIs are requested when the analyst saves that provider. Page scripts are injected on demand, not as persistent content scripts.
 - **Screenshots** need Chrome's all-sites permission (Chrome does not allow tab capture with narrower host access). It is optional, requested only with the analyst's click, revocable in Settings → Safety, and does not widen what the agent can reach: the tab group remains the boundary.
 - Position clicks (`click_at`) are classified by the element actually under the point at click time, and are refused if the page changed since the screenshot.
 
 ### T6 — API key theft
-**Mitigations.** The key is stored in extension storage (inaccessible to web pages), optionally in session storage only, and is sent only to the model API. It is never included in prompts, memory, exports or logs.
+**Mitigations.** Keys are stored per provider in extension storage (inaccessible to web pages), optionally in session storage only, and each is sent only to its own provider's API, in a request header (never a URL). They are never included in prompts, memory, exports or logs.
 
 ### T7 — Sensitive data sent to the model provider
-**Mitigations.** Documented prominently; optional email masking; the analyst chooses the provider and key under their organisation's agreement. Organisations that cannot send alert data to a hosted model can add a provider for a self-hosted endpoint (see `docs/adding-a-provider.md`).
+**Mitigations.** Documented prominently; optional email masking; the analyst chooses the provider and key under their organisation's agreement. Organisations that cannot send alert data to a hosted model can use a local model (Ollama, LM Studio) or a self-hosted OpenAI-compatible endpoint, so data stays on infrastructure they control. Each provider's settings show how it handles data, and the Gemini free tier — where Google may use submitted data — carries an explicit warning. Hosted requests to OpenAI are sent with `store=false`.
 
 ### T8 — Unwanted wiki changes
 **Threat.** The agent overwrites or vandalises team documentation, publishes sensitive data, or is steered by injected content into editing pages.

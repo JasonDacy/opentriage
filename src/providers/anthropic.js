@@ -9,6 +9,20 @@ export const ANTHROPIC_MODELS = [
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
+// Other providers can leave private fields on blocks (Gemini thought
+// signatures, OpenAI reasoning items). The Messages API rejects them.
+const PRIVATE_FIELDS = ['thought_signature', 'gemini_id'];
+export function forAnthropic(messages) {
+  return messages.map((m) => {
+    if (!Array.isArray(m.content)) return m;
+    if (!m.content.some((b) => b.type === 'reasoning' || PRIVATE_FIELDS.some((f) => f in b))) return m;
+    const content = m.content
+      .filter((b) => b.type !== 'reasoning')
+      .map((b) => (PRIVATE_FIELDS.some((f) => f in b) ? Object.fromEntries(Object.entries(b).filter(([k]) => !PRIVATE_FIELDS.includes(k))) : b));
+    return { ...m, content: content.length ? content : [{ type: 'text', text: '(no text)' }] };
+  });
+}
+
 export function createAnthropicProvider({ apiKey, model, fetchImpl = globalThis.fetch.bind(globalThis) }) {
   if (!apiKey) throw new Error('No API key set. Add one in OpenTriage settings.');
 
@@ -22,7 +36,7 @@ export function createAnthropicProvider({ apiKey, model, fetchImpl = globalThis.
         max_tokens: maxTokens,
         // The methodology, profile and memory are stable across a run; cache them.
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        messages,
+        messages: forAnthropic(messages),
         tools,
       };
       let res;

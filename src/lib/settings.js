@@ -3,6 +3,11 @@ import { KEYS } from './storage.js';
 export const DEFAULT_SETTINGS = {
   provider: 'anthropic',
   model: 'claude-sonnet-5-5',
+  // Local or OpenAI-compatible server (provider 'compatible').
+  baseUrl: '',
+  authStyle: 'bearer', // or 'api-key' (Azure OpenAI)
+  // Per-provider override of whether the model accepts images: { [providerId]: boolean }.
+  visionOverride: {},
   maxSteps: 40,
   maxTokens: 4096,
   // 'strict'    — every click and every typed submit needs approval

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-10-16
+
+- **Choose your model.** New providers alongside Anthropic (Claude):
+  - **OpenAI** (GPT-6 and GPT-5.6 families) through the Responses API, stateless (`store=false`), replaying encrypted reasoning between tool calls.
+  - **Google Gemini** (Gemini 3.x) through `generateContent`, with thought signatures preserved for function calling. The settings page warns that the free tier lets Google use submitted data.
+  - **Local or OpenAI-compatible servers** — Ollama, LM Studio, llama.cpp, vLLM, OpenRouter, Groq, Azure OpenAI — with one-click URL presets, **Load models from server**, optional key and Azure-style `api-key` header.
+- Each provider keeps its own API key. Chrome asks for access to a provider's API the first time you save it; nothing new is requested at install.
+- **Text-only models**: untick *This model accepts images* and OpenTriage drops screenshot and click-by-position tools and reads pages as text.
+- **Other model ID…** lets you use any model a provider offers, not just the listed ones.
+- Clear errors for rejected keys, unknown models, an unreachable local server, and Ollama's extension-origin block.
+
+
 ## 0.3.3 — 2026-10-16
 
 - **Team builds.** `npm run package[:trusted] -- --env <exported environment file> --team <name>` bundles a team's environment facts into the extension. Facts load automatically on install; a newer team build updates them, removing facts the team dropped but keeping anything the analyst edited or added. Team builds are written only to `dist/` (git-ignored) and are clearly labelled "<TEAM> team build".
