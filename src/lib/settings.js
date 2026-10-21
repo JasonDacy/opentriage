@@ -41,6 +41,24 @@ export async function loadSettings(storage) {
   return { ...DEFAULT_SETTINGS, ...saved };
 }
 
+/**
+ * Check a new enrichment source from the settings form.
+ * Returns { ok: true, url } with the URL to save, or { ok: false, error } naming
+ * every field that needs fixing. A URL copied from the address bar has its
+ * braces encoded as %7Bioc%7D, so that is accepted as {ioc}.
+ */
+export function validateEnrichmentSource({ name, url, types }) {
+  const n = String(name || '').trim();
+  const u = String(url || '').trim().replace(/%7Bioc%7D/gi, '{ioc}');
+  const problems = [];
+  if (!n) problems.push('a name');
+  if (!/^https:\/\//i.test(u)) problems.push('a URL starting with https://');
+  else if (!u.includes('{ioc}')) problems.push('{ioc} in the URL where the indicator goes');
+  else if (!/^https:\/\/[^/{}]+/i.test(u)) problems.push('a host name before {ioc}');
+  if (!types || !types.length) problems.push('at least one indicator type');
+  return problems.length ? { ok: false, error: `Still needed: ${problems.join('; ')}` } : { ok: true, url: u };
+}
+
 export async function saveSettings(storage, patch) {
   const current = await loadSettings(storage);
   const next = { ...current, ...patch };
