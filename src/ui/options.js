@@ -1,5 +1,5 @@
 import { chromeStorage, KEYS } from '../lib/storage.js';
-import { loadSettings, saveSettings, DEFAULT_SETTINGS } from '../lib/settings.js';
+import { loadSettings, saveSettings, validateEnrichmentSource, DEFAULT_SETTINGS } from '../lib/settings.js';
 import { createAudit } from '../lib/audit.js';
 import { createMemory, CATEGORIES } from '../memory/memory.js';
 import { createLibrary } from '../playbooks/library.js';
@@ -328,9 +328,10 @@ function renderSources() {
 }
 $('addSource').addEventListener('click', async () => {
   const name = $('srcName').value.trim();
-  const url = $('srcUrl').value.trim();
   const types = [...$('srcTypes').querySelectorAll('input:checked')].map((i) => i.value);
-  if (!name || !/^https:\/\/.+\{ioc\}/.test(url) || !types.length) return toast('Name, an https URL containing {ioc}, and at least one type are required');
+  const check = validateEnrichmentSource({ name, url: $('srcUrl').value, types });
+  if (!check.ok) return toast(check.error);
+  const { url } = check;
   settings = await saveSettings(storage, { enrichmentSources: [...settings.enrichmentSources, { id: slug(name), name, url, types, enabled: true }] });
   $('srcName').value = '';
   $('srcUrl').value = '';
