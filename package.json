@@ -1,6 +1,6 @@
 {
   "name": "opentriage",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "AI investigation assistant for SOC analysts, as a Chrome extension. Vendor-neutral, learns each environment locally, human-approved actions.",
   "type": "module",
   "private": true,

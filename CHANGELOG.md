@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 — 2026-10-22
 
+- **Fix:** a long investigation could stop with `400 … tool_use ids were found without tool_result blocks`, and every message after that failed too. It happened when a response was cut off by the length limit in the middle of a tool call (for example while drafting a long playbook or wiki page), or when a turn was interrupted. OpenTriage now answers any unfinished tool call before the next request, tells the model a cut-off call wasn't run so it can retry with a shorter input, and keeps going.
+- Each response now has room for at least 8,192 tokens, so long playbooks and wiki pages are less likely to be cut off.
 - **Clearer enrichment-source errors.** Adding a source now names every field that still needs fixing instead of one generic message, and a URL copied from the address bar with `%7Bioc%7D` is accepted as `{ioc}`.
 
 ## 0.4.0 — 2026-10-16

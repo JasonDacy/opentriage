@@ -71,6 +71,38 @@ export function stripOldThinking(messages, { all = false } = {}) {
   return removed;
 }
 
+/**
+ * Every tool_use must be answered by a tool_result in the very next message,
+ * or the model API rejects the whole conversation. If a turn was interrupted
+ * (an error, a stop, a cut-off response), answer the dangling calls so the
+ * conversation can carry on. Returns the number of results added.
+ */
+export function repairToolPairs(messages) {
+  let added = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) continue;
+    const ids = m.content.filter((b) => b.type === 'tool_use').map((b) => b.id);
+    if (!ids.length) continue;
+    let next = messages[i + 1];
+    if (!next || next.role !== 'user') {
+      if (!next) break; // the call is about to be run
+      next = { role: 'user', content: [] };
+      messages.splice(i + 1, 0, next);
+    }
+    if (!Array.isArray(next.content)) next.content = [{ type: 'text', text: next.content }];
+    const answered = new Set(next.content.filter((b) => b.type === 'tool_result').map((b) => b.tool_use_id));
+    const missing = ids.filter((id) => !answered.has(id));
+    if (!missing.length) continue;
+    next.content = [
+      ...missing.map((id) => ({ type: 'tool_result', tool_use_id: id, content: 'Not run: the previous turn was interrupted before this call completed.', is_error: true })),
+      ...next.content,
+    ];
+    added += missing.length;
+  }
+  return added;
+}
+
 const isThinkingError = (e) => e && (e.status === 400 || /\(400\)/.test(e.message || '')) && /thinking|signature/i.test(e.message || '');
 
 /**
@@ -143,7 +175,7 @@ export function createSession(deps) {
   }
 
   async function complete(sys) {
-    const req = { system: sys, messages, tools: deps.provider.vision === false ? TEXT_ONLY_TOOL_DEFS : TOOL_DEFS, maxTokens: deps.settings.maxTokens || 4096, signal: controller.signal };
+    const req = { system: sys, messages, tools: deps.provider.vision === false ? TEXT_ONLY_TOOL_DEFS : TOOL_DEFS, maxTokens: Math.max(deps.settings.maxTokens || 0, 8192), signal: controller.signal };
     try {
       return await deps.provider.complete(req);
     } catch (e) {
@@ -198,6 +230,8 @@ export function createSession(deps) {
         for (let step = 0; step < maxSteps; step++) {
           emit('thinking', { step });
           compactHistory(messages);
+          const repaired = repairToolPairs(messages);
+          if (repaired) await deps.audit.log({ type: 'run.repair', runId: run.id, results: repaired });
           const res = await complete(sys);
           messages.push({ role: 'assistant', content: res.content });
           emit('usage', { usage: res.usage });
@@ -207,9 +241,18 @@ export function createSession(deps) {
           }
 
           const calls = res.content.filter((b) => b.type === 'tool_use');
-          if (!calls.length || res.stopReason !== 'tool_use') {
+          if (!calls.length) {
             if (res.stopReason === 'max_tokens') emit('status', { text: 'The response hit the length limit. Ask OpenTriage to continue.' });
             break;
+          }
+          if (res.stopReason !== 'tool_use') {
+            // The response was cut off (or ended oddly) mid tool call: the input may be incomplete, so don't run it.
+            const why = res.stopReason === 'max_tokens'
+              ? 'Not run: your response hit the length limit before this tool call was complete. Retry it with a shorter input (for long content, split it into smaller steps).'
+              : `Not run: the response ended (${res.stopReason || 'unknown reason'}) before this tool call could be made. Retry it if it is still needed.`;
+            messages.push({ role: 'user', content: calls.map((c) => ({ type: 'tool_result', tool_use_id: c.id, content: why, is_error: true })) });
+            await deps.audit.log({ type: 'run.cutoff', runId: run.id, stopReason: res.stopReason, calls: calls.length });
+            continue;
           }
 
           const results = [];
@@ -218,10 +261,15 @@ export function createSession(deps) {
               results.push({ type: 'tool_result', tool_use_id: call.id, content: 'Stopped by the analyst.', is_error: true });
               continue;
             }
-            emit('tool', { name: call.name, input: call.input });
-            const r = await tools.run(call.name, call.input);
-            const preview = typeof r.content === 'string' ? r.content : r.content.filter((c) => c.type === 'text').map((c) => c.text).join(' ');
-            emit('tool_result', { name: call.name, isError: r.isError, preview: preview.slice(0, 300) });
+            let r;
+            try {
+              emit('tool', { name: call.name, input: call.input });
+              r = await tools.run(call.name, call.input);
+              const preview = typeof r.content === 'string' ? r.content : (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(' ');
+              emit('tool_result', { name: call.name, isError: r.isError, preview: preview.slice(0, 300) });
+            } catch (e) {
+              r = r || { isError: true, content: `Tool error: ${e.message || e}` };
+            }
             results.push({ type: 'tool_result', tool_use_id: call.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
           }
           messages.push({ role: 'user', content: results });

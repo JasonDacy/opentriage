@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "OpenTriage",
   "short_name": "OpenTriage",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "An AI investigation assistant for SOC analysts. Works in any SIEM or XDR console, learns your environment locally, and never changes anything without your approval.",
   "minimum_chrome_version": "116",
   "icons": {

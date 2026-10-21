@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createSession, compactHistory } from '../src/agent/agent.js';
+import { createSession, compactHistory, repairToolPairs } from '../src/agent/agent.js';
 import { TOOL_DEFS } from '../src/agent/tools.js';
 import { createKnowledge } from '../src/knowledge/loader.js';
 import { createMemory } from '../src/memory/memory.js';
@@ -734,4 +734,74 @@ test('text-only models are not offered screenshot tools', async () => {
   const names = ctx.provider.requests[0].tools.map((t) => t.name);
   assert.ok(!names.includes('screenshot') && !names.includes('click_at'));
   assert.ok(names.includes('get_page_snapshot'));
+});
+
+// Every tool_use must be answered in the next message, or the API rejects the conversation.
+function assertPaired(messages) {
+  messages.forEach((m, i) => {
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) return;
+    const ids = m.content.filter((b) => b.type === 'tool_use').map((b) => b.id);
+    if (!ids.length) return;
+    const next = messages[i + 1];
+    assert.ok(next && next.role === 'user', `message ${i + 1} should answer the tool calls`);
+    const answered = new Set(next.content.filter((b) => b.type === 'tool_result').map((b) => b.tool_use_id));
+    for (const id of ids) assert.ok(answered.has(id), `tool_use ${id} has no tool_result`);
+    // results must come before any text in that message
+    const firstText = next.content.findIndex((b) => b.type !== 'tool_result');
+    const lastResult = next.content.map((b) => b.type).lastIndexOf('tool_result');
+    assert.ok(firstText === -1 || lastResult < firstText, 'tool results come first');
+  });
+}
+
+test('repairToolPairs answers dangling calls and leaves good history alone', () => {
+  const good = [
+    { role: 'user', content: 'go' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'x', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a', content: 'ok' }] },
+  ];
+  assert.equal(repairToolPairs(good), 0);
+  const broken = [
+    { role: 'user', content: 'go' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'x', input: {} }, { type: 'tool_use', id: 'b', name: 'y', input: {} }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a', content: 'ok' }] },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'c', name: 'z', input: {} }] },
+    { role: 'user', content: 'what happened?' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'd', name: 'z', input: {} }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'hm' }] },
+    { role: 'user', content: 'and now?' },
+  ];
+  assert.equal(repairToolPairs(broken), 3);
+  assertPaired(broken);
+  assert.equal(broken[4].content.at(-1).text, 'what happened?');
+});
+
+test('a tool call cut off by the length limit is answered, and the run carries on', async () => {
+  const ctx = await setup([
+    { content: [{ type: 'text', text: 'Drafting.' }, { type: 'tool_use', id: 'cut', name: 'get_page_snapshot', input: {} }], stopReason: 'max_tokens', usage: {} },
+    toolUse('t2', 'get_page_snapshot', {}),
+    { content: [{ type: 'text', text: 'Report done.' }], stopReason: 'end_turn', usage: {} },
+    { content: [{ type: 'text', text: 'Follow-up answer.' }], stopReason: 'end_turn', usage: {} },
+  ]);
+  await ctx.session.send('Investigate', { mode: 'investigate' });
+  const r1 = ctx.provider.requests[1].messages.at(-1).content[0];
+  assert.equal(r1.tool_use_id, 'cut');
+  assert.equal(r1.is_error, true);
+  assert.match(r1.content, /length limit/);
+  await ctx.session.send('Why?', { mode: 'chat' });
+  for (const req of ctx.provider.requests) assertPaired(req.messages);
+  assert.ok(ctx.provider.requests.every((r) => r.maxTokens >= 8192));
+});
+
+test('an interrupted turn does not break the next message', async () => {
+  const ctx = await setup([
+    { content: [{ type: 'text', text: 'ok' }], stopReason: 'end_turn', usage: {} },
+    { content: [{ type: 'text', text: 'still working' }], stopReason: 'end_turn', usage: {} },
+  ]);
+  await ctx.session.send('Hello', { mode: 'chat' });
+  // Simulate a turn that died after the model asked for a tool (e.g. the panel was closed mid-run).
+  ctx.session.messages.push({ role: 'assistant', content: [{ type: 'tool_use', id: 'lost', name: 'get_page_snapshot', input: {} }] });
+  await ctx.session.send('Are you there?', { mode: 'chat' });
+  const last = ctx.provider.requests.at(-1).messages;
+  assertPaired(last);
+  assert.equal(last.at(-1).content[0].tool_use_id, 'lost');
 });
