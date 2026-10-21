@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Clearer enrichment-source errors.** Adding a source now names every field that still needs fixing instead of one generic message, and a URL copied from the address bar with `%7Bioc%7D` is accepted as `{ioc}`.
+
 ## 0.4.0 — 2026-10-16
 
 - **Choose your model.** New providers alongside Anthropic (Claude):
